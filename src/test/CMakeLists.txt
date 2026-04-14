@@ -17,6 +17,28 @@ FetchContent_MakeAvailable(Catch2)
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 
+# Hash utility tests
+add_executable(hashutils_test
+    hashutils_test.cpp
+)
+
+target_link_libraries(hashutils_test PRIVATE
+    Catch2::Catch2WithMain
+    Qt6::Core
+)
+
+target_include_directories(hashutils_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+
+target_compile_features(hashutils_test PRIVATE cxx_std_20)
+target_compile_options(hashutils_test PRIVATE
+    -Wall -Wextra -Wpedantic
+    $<$<CONFIG:Debug>:-g -O0>
+)
+
+catch_discover_tests(hashutils_test)
+
 # Add the customization generator test executable
 add_executable(customization_generator_test
     ${CMAKE_CURRENT_SOURCE_DIR}/../customization_generator.h
@@ -486,5 +508,4 @@ add_custom_target(test_rpiboot
     DEPENDS rpiboot_protocol_test rpiboot_bootfiles_test fastboot_protocol_test sparse_encoder_test
     COMMENT "Running all rpiboot unit tests"
 )
-
 

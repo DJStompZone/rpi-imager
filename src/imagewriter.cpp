@@ -22,6 +22,7 @@
 #include "wlancredentials.h"
 #include "device_info.h"
 #include "platformquirks.h"
+#include "hashutils.h"
 #ifndef CLI_ONLY_BUILD
 #include "iconimageprovider.h"
 #include "iconmultifetcher.h"
@@ -514,7 +515,7 @@ void ImageWriter::setSrc(const QUrl &url, quint64 downloadLen, quint64 extrLen, 
     _src = url;
     _downloadLen = downloadLen;
     _extrLen = extrLen;
-    _expectedHash = expectedHash;
+    _expectedHash = hashutils::normalizeExpectedSha256(expectedHash);
     _multipleFilesInZip = multifilesinzip;
     _parentCategory = parentcategory;
     _osName = osname;
