@@ -12,6 +12,7 @@
 #include "timeout_utils.h"
 #include "platformquirks.h"
 #include "drivelist/drivelist.h"
+#include "hashutils.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -60,7 +61,7 @@ using rpi_imager::TimeoutDefaults::kCriticalMemoryMB;
 QByteArray DownloadThread::_proxy;
 
 DownloadThread::DownloadThread(const QByteArray &url, const QByteArray &localfilename, const QByteArray &expectedHash, QObject *parent) :
-    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(expectedHash),
+    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(hashutils::normalizeExpectedSha256(expectedHash)),
     _firstBlock(nullptr), _cancelled(false), _successful(false), _verifyEnabled(false), _cacheEnabled(false), _lastModified(0), _serverTime(0),  _lastFailureTime(0),
     _inputBufferSize(SystemMemoryManager::instance().getOptimalInputBufferSize()), _writehash(OSLIST_HASH_ALGORITHM), _verifyhash(OSLIST_HASH_ALGORITHM),
     _hasPendingHash(false)

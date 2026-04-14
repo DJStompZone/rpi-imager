@@ -12,6 +12,7 @@
 #include "acceleratedcryptographichash.h"
 #include "ringbuffer.h"
 #include "systemmemorymanager.h"
+#include "hashutils.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -45,7 +46,7 @@ FastbootFlashThread::FastbootFlashThread(const QString& fastbootId,
     , _imageUrl(imageUrl)
     , _downloadLen(downloadLen)
     , _extractLen(extractLen)
-    , _expectedHash(expectedHash)
+    , _expectedHash(hashutils::normalizeExpectedSha256(expectedHash))
 {
 }
 
