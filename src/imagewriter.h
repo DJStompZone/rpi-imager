@@ -217,6 +217,8 @@ public:
 
     /* Handle keychain permission response from QML */
     Q_INVOKABLE void keychainPermissionResponse(bool granted);
+    /* Handle checksum mismatch proceed/cancel response from QML */
+    Q_INVOKABLE void checksumMismatchResponse(bool proceed);
 
     /* Return filename part of URL set */
     Q_INVOKABLE QString srcFileName();
@@ -391,6 +393,7 @@ signals:
     void selectedDeviceRemoved();
     void writeCancelledDueToDeviceRemoval();
     void keychainPermissionRequested();
+    void checksumMismatchRequested(QVariant msg);
     void keychainPermissionResponseReceived();
     void writeStateChanged();
     void connectTokenReceived(const QString &token);
@@ -417,6 +420,7 @@ protected slots:
     void onCancelled();
     void onFinalizing();
     void onPreparationStatusUpdate(QString msg);
+    void onChecksumMismatchPrompt(QString msg);
     void onOsListFetchComplete(const QByteArray &data, const QUrl &url, const QUrl &effectiveUrl);
     void onOsListFetchError(const QString &errorMessage, const QUrl &url);
     void onNetworkConnectionStats(const QString &statsMetadata, const QUrl &url);

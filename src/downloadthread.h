@@ -15,6 +15,8 @@
 #include <QFile>
 #include <QElapsedTimer>
 #include <QFuture>
+#include <QMutex>
+#include <QWaitCondition>
 #include <atomic>
 #include <time.h>
 #include <curl/curl.h>
@@ -186,6 +188,7 @@ public:
 signals:
     void success();
     void error(QString msg);
+    void checksumMismatchPrompt(QString msg);
     void cacheFileUpdated(QByteArray sha256);
     void cacheFileHashUpdated(QByteArray cacheFileHash, QByteArray imageHash);
     void finalizing();
@@ -233,6 +236,9 @@ signals:
     // Connected to UI with Qt::QueuedConnection for cross-thread safety
     void asyncWriteProgress(quint64 bytesWritten, quint64 totalBytes);
 
+public slots:
+    void respondToChecksumMismatch(bool proceed);
+
 protected:
     virtual void run();
     virtual void _onDownloadSuccess();
@@ -276,6 +282,10 @@ protected:
     size_t _firstBlockSize;
     static QByteArray _proxy;
     std::atomic<bool> _cancelled;  // Atomic for safe access from timeout utility
+    QMutex _checksumMismatchMutex;
+    QWaitCondition _checksumMismatchCondition;
+    bool _checksumMismatchDecisionPending;
+    bool _checksumMismatchProceed;
     bool _successful, _verifyEnabled, _cacheEnabled, _ejectEnabled;
     time_t _lastModified, _serverTime, _lastFailureTime;
     QElapsedTimer _timer;

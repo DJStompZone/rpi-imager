@@ -206,6 +206,89 @@ ApplicationWindow {
         }
     }
 
+    // Dialog shown when image checksum does not match expected value.
+    BaseDialog {
+        id: checksumMismatchDialog
+        imageWriter: window.imageWriter
+        parent: overlayRoot
+        anchors.centerIn: parent
+
+        property string message: ""
+
+        function escapePressed() {
+            checksumMismatchDialog.close()
+            window.imageWriter.checksumMismatchResponse(false)
+        }
+
+        Component.onCompleted: {
+            registerFocusGroup("content", function(){
+                if (checksumMismatchDialog.imageWriter && checksumMismatchDialog.imageWriter.isScreenReaderActive()) {
+                    return [checksumMismatchTitle, checksumMismatchMessage]
+                }
+                return []
+            }, 0)
+            registerFocusGroup("buttons", function(){
+                return [checksumMismatchCancelButton, checksumMismatchProceedButton]
+            }, 1)
+        }
+
+        Text {
+            id: checksumMismatchTitle
+            text: qsTr("Checksum mismatch")
+            font.pointSize: Style.fontSizeHeading
+            font.family: Style.fontFamilyBold
+            font.bold: true
+            color: Style.formLabelColor
+            Layout.fillWidth: true
+            Accessible.role: Accessible.Heading
+            Accessible.name: text
+        }
+
+        Text {
+            id: checksumMismatchMessage
+            text: checksumMismatchDialog.message
+            textFormat: Text.StyledText
+            wrapMode: Text.WordWrap
+            font.pointSize: Style.fontSizeDescription
+            font.family: Style.fontFamily
+            color: Style.textDescriptionColor
+            Layout.fillWidth: true
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text.replace(/<[^>]+>/g, '')
+        }
+
+        Text {
+            text: qsTr("Continue anyway?")
+            wrapMode: Text.WordWrap
+            font.pointSize: Style.fontSizeDescription
+            font.family: Style.fontFamilyBold
+            color: Style.formLabelColor
+            Layout.fillWidth: true
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.spacingMedium
+            Item { Layout.fillWidth: true }
+            ImButton {
+                id: checksumMismatchCancelButton
+                text: CommonStrings.cancel
+                onClicked: {
+                    checksumMismatchDialog.close()
+                    window.imageWriter.checksumMismatchResponse(false)
+                }
+            }
+            ImButton {
+                id: checksumMismatchProceedButton
+                text: qsTr("Continue anyway")
+                onClicked: {
+                    checksumMismatchDialog.close()
+                    window.imageWriter.checksumMismatchResponse(true)
+                }
+            }
+        }
+    }
+
     // Specific dialog for storage removal during write
     BaseDialog {
         id: storageRemovedDialog
@@ -633,6 +716,11 @@ ApplicationWindow {
         } else {
             keychainpopup.askForPermission();
         }
+    }
+
+    function onChecksumMismatchRequested(message) {
+        checksumMismatchDialog.message = message
+        checksumMismatchDialog.open()
     }
     
     

@@ -28,6 +28,7 @@
 #include <QProcess>
 #include <QSettings>
 #include <QFuture>
+#include <QMutexLocker>
 #include <QtConcurrent/qtconcurrentrun.h>
 #include <QtNetwork/QNetworkProxy>
 #include <QTextStream>
@@ -61,7 +62,7 @@ QByteArray DownloadThread::_proxy;
 
 DownloadThread::DownloadThread(const QByteArray &url, const QByteArray &localfilename, const QByteArray &expectedHash, QObject *parent) :
     QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(expectedHash),
-    _firstBlock(nullptr), _cancelled(false), _successful(false), _verifyEnabled(false), _cacheEnabled(false), _lastModified(0), _serverTime(0),  _lastFailureTime(0),
+    _firstBlock(nullptr), _cancelled(false), _checksumMismatchDecisionPending(false), _checksumMismatchProceed(false), _successful(false), _verifyEnabled(false), _cacheEnabled(false), _lastModified(0), _serverTime(0),  _lastFailureTime(0),
     _inputBufferSize(SystemMemoryManager::instance().getOptimalInputBufferSize()), _writehash(OSLIST_HASH_ALGORITHM), _verifyhash(OSLIST_HASH_ALGORITHM),
     _hasPendingHash(false)
 {
@@ -99,6 +100,14 @@ DownloadThread::DownloadThread(const QByteArray &url, const QByteArray &localfil
     // Initialize bottleneck detection
     _currentBottleneck = BottleneckState::None;
     _bottleneckTimer.start();
+}
+
+void DownloadThread::respondToChecksumMismatch(bool proceed)
+{
+    QMutexLocker locker(&_checksumMismatchMutex);
+    _checksumMismatchProceed = proceed;
+    _checksumMismatchDecisionPending = false;
+    _checksumMismatchCondition.wakeAll();
 }
 
 DownloadThread::~DownloadThread()
@@ -1235,6 +1244,11 @@ void DownloadThread::_header(const string &header)
 void DownloadThread::cancelDownload()
 {
     _cancelled = true;
+    {
+        QMutexLocker locker(&_checksumMismatchMutex);
+        _checksumMismatchDecisionPending = false;
+    }
+    _checksumMismatchCondition.wakeAll();
     
     // Cancel any pending async I/O to unblock waiting operations
     if (_file) {
@@ -1713,9 +1727,27 @@ void DownloadThread::_writeComplete()
                          "Please check your network connection and try again.").arg(QString(_expectedHash), QString(computedHash));
         }
         
-        DownloadThread::_onDownloadError(errorMsg);
-        _closeFiles();
-        return;
+        {
+            QMutexLocker locker(&_checksumMismatchMutex);
+            _checksumMismatchDecisionPending = true;
+            _checksumMismatchProceed = false;
+        }
+        emit checksumMismatchPrompt(errorMsg);
+
+        {
+            QMutexLocker locker(&_checksumMismatchMutex);
+            while (_checksumMismatchDecisionPending && !_cancelled.load())
+            {
+                _checksumMismatchCondition.wait(&_checksumMismatchMutex);
+            }
+            if (!_checksumMismatchProceed)
+            {
+                DownloadThread::_onDownloadError(errorMsg);
+                _closeFiles();
+                return;
+            }
+        }
+        qDebug() << "User chose to proceed despite checksum mismatch";
     }
     if (_cacheEnabled && _expectedHash == computedHash)
     {

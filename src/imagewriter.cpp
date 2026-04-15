@@ -1233,6 +1233,7 @@ void ImageWriter::startWrite()
 
     connect(_thread, SIGNAL(success()), SLOT(onSuccess()));
     connect(_thread, SIGNAL(error(QString)), SLOT(onError(QString)));
+    connect(_thread, SIGNAL(checksumMismatchPrompt(QString)), SLOT(onChecksumMismatchPrompt(QString)));
     connect(_thread, SIGNAL(finalizing()), SLOT(onFinalizing()));
     connect(_thread, SIGNAL(preparationStatusUpdate(QString)), SLOT(onPreparationStatusUpdate(QString)));
     // Ensure cleanup of thread pointer on finish in all paths
@@ -2583,6 +2584,11 @@ void ImageWriter::onPreparationStatusUpdate(QString msg)
     emit preparationStatusUpdate(msg);
 }
 
+void ImageWriter::onChecksumMismatchPrompt(QString msg)
+{
+    emit checksumMismatchRequested(msg);
+}
+
 void ImageWriter::openFileDialog(const QString &title, const QString &filter)
 {
 #ifndef CLI_ONLY_BUILD
@@ -3267,6 +3273,16 @@ void ImageWriter::keychainPermissionResponse(bool granted)
     _keychainPermissionGranted = granted;
     _keychainPermissionReceived = true;
     emit keychainPermissionResponseReceived();
+}
+
+void ImageWriter::checksumMismatchResponse(bool proceed)
+{
+    if (!_thread) {
+        return;
+    }
+    QMetaObject::invokeMethod(_thread, "respondToChecksumMismatch",
+                              Qt::QueuedConnection,
+                              Q_ARG(bool, proceed));
 }
 
 bool ImageWriter::getBoolSetting(const QString &key)
@@ -4064,6 +4080,7 @@ void ImageWriter::_continueStartWriteAfterCacheVerification(bool cacheIsValid)
 
     connect(_thread, SIGNAL(success()), SLOT(onSuccess()));
     connect(_thread, SIGNAL(error(QString)), SLOT(onError(QString)));
+    connect(_thread, SIGNAL(checksumMismatchPrompt(QString)), SLOT(onChecksumMismatchPrompt(QString)));
     connect(_thread, SIGNAL(finalizing()), SLOT(onFinalizing()));
     connect(_thread, SIGNAL(preparationStatusUpdate(QString)), SLOT(onPreparationStatusUpdate(QString)));
     // Ensure cleanup of thread pointer on finish in all paths
