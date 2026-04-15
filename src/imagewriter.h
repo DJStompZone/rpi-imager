@@ -113,6 +113,12 @@ public:
 
     /* Skip only the current post-write verification pass (does not change default setting) */
     Q_INVOKABLE void skipCurrentVerification();
+    
+    /* Ask user whether to continue after a checksum mismatch (called from worker thread) */
+    Q_INVOKABLE bool confirmChecksumMismatch(const QString &message);
+    
+    /* Respond to checksum mismatch confirmation dialog */
+    Q_INVOKABLE void checksumMismatchResponse(bool proceed);
 
     /* Return true if url is in our local disk cache */
     Q_INVOKABLE bool isCached(const QUrl &url, const QByteArray &sha256);
@@ -392,6 +398,8 @@ signals:
     void writeCancelledDueToDeviceRemoval();
     void keychainPermissionRequested();
     void keychainPermissionResponseReceived();
+    void checksumMismatchDialogRequested(QVariant message);
+    void checksumMismatchResponseReceived();
     void writeStateChanged();
     void connectTokenReceived(const QString &token);
     void connectTokenConflictDetected(const QString &token);
@@ -444,6 +452,8 @@ private:
     // Keychain permission tracking
     bool _keychainPermissionGranted;
     bool _keychainPermissionReceived;
+    bool _checksumMismatchProceed;
+    bool _checksumMismatchResponseReceived;
 
     // Recursively walk all the entries with subitems and, for any which
     // refer to an external JSON list, fetch the list and put it in place.
