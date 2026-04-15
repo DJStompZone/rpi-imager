@@ -12,6 +12,7 @@
 #include "timeout_utils.h"
 #include "platformquirks.h"
 #include "drivelist/drivelist.h"
+#include "hashutils.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -60,7 +61,7 @@ using rpi_imager::TimeoutDefaults::kCriticalMemoryMB;
 QByteArray DownloadThread::_proxy;
 
 DownloadThread::DownloadThread(const QByteArray &url, const QByteArray &localfilename, const QByteArray &expectedHash, QObject *parent) :
-    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(expectedHash),
+    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(hashutils::normalizeExpectedSha256(expectedHash)),
     _firstBlock(nullptr), _cancelled(false), _successful(false), _verifyEnabled(false), _cacheEnabled(false), _lastModified(0), _serverTime(0),  _lastFailureTime(0),
     _inputBufferSize(SystemMemoryManager::instance().getOptimalInputBufferSize()), _writehash(OSLIST_HASH_ALGORITHM), _verifyhash(OSLIST_HASH_ALGORITHM),
     _hasPendingHash(false)
@@ -1034,21 +1035,41 @@ size_t DownloadThread::_writeFile(const char *buf, size_t len, WriteCompleteCall
         }
     }
 
-    // Start hash computation for current buffer
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    _pendingHashFuture = QtConcurrent::run(&DownloadThread::_hashData, this, buf, len);
-#else
-    _pendingHashFuture = QtConcurrent::run(this, &DownloadThread::_hashData, buf, len);
-#endif
-    _hasPendingHash = true;
-
-    // Determine if we can use zero-copy async I/O
+    // Determine if we can use zero-copy async I/O.
+    // We need this decision before launching hash work so we can select a
+    // buffer-lifetime-safe hashing strategy.
     opTimer.start();
     size_t bytes_written = 0;
     rpi_imager::FileError write_result;
-    
     bool useAsync = _debugAsyncIO && _file->IsAsyncIOSupported() && _file->GetAsyncQueueDepth() > 1;
     bool useZeroCopy = useAsync && onComplete;  // Zero-copy requires completion callback
+
+    // Start hash computation for current buffer.
+    //
+    // IMPORTANT LIFETIME NOTE:
+    // - Zero-copy path: callback waits for hash future before releasing caller buffer,
+    //   so hashing can safely read from `buf` directly.
+    // - Non-zero-copy paths: caller buffer may be reused immediately after return, so
+    //   we must hash from a private copy to avoid nondeterministic digest corruption.
+    if (useZeroCopy) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        _pendingHashFuture = QtConcurrent::run(&DownloadThread::_hashData, this, buf, len);
+#else
+        _pendingHashFuture = QtConcurrent::run(this, &DownloadThread::_hashData, buf, len);
+#endif
+    } else {
+        QByteArray hashCopy(buf, static_cast<qsizetype>(len));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        _pendingHashFuture = QtConcurrent::run([this, hashCopy]() {
+            _hashData(hashCopy.constData(), static_cast<size_t>(hashCopy.size()));
+        });
+#else
+        _pendingHashFuture = QtConcurrent::run([this, hashCopy]() {
+            _hashData(hashCopy.constData(), static_cast<size_t>(hashCopy.size()));
+        });
+#endif
+    }
+    _hasPendingHash = true;
     
     if (useZeroCopy) {
         // ZERO-COPY ASYNC: Use caller's buffer directly, release via callback
