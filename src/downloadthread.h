@@ -238,6 +238,7 @@ protected:
     virtual void _onDownloadSuccess();
     virtual void _onDownloadError(const QString &msg);
     virtual void _onWriteError();
+    virtual QByteArray _alternateExpectedHash() const;
     QString _fileErrorToString(rpi_imager::FileError error, const QString &operation = QString());
 
     void _hashData(const char *buf, size_t len);
