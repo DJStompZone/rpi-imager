@@ -133,7 +133,9 @@ ImageWriter::ImageWriter(QObject *parent)
       _piConnectToken(),
 #endif
       _progressWatchdog(nullptr),
-      _forceSyncMode(false)
+      _forceSyncMode(false),
+      _checksumMismatchProceed(false),
+      _checksumMismatchResponseReceived(false)
 {
     // Initialise CacheManager
     _cacheManager = new CacheManager(this);
@@ -3267,6 +3269,39 @@ void ImageWriter::keychainPermissionResponse(bool granted)
     _keychainPermissionGranted = granted;
     _keychainPermissionReceived = true;
     emit keychainPermissionResponseReceived();
+}
+
+bool ImageWriter::confirmChecksumMismatch(const QString &message)
+{
+    _checksumMismatchProceed = false;
+    _checksumMismatchResponseReceived = false;
+
+    emit checksumMismatchDialogRequested(message);
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    timeout.setInterval(120000); // 2 minute timeout
+
+    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    connect(this, &ImageWriter::checksumMismatchResponseReceived, &loop, &QEventLoop::quit);
+
+    timeout.start();
+    loop.exec();
+
+    if (!_checksumMismatchResponseReceived) {
+        qWarning() << "Checksum mismatch confirmation timed out; aborting write";
+        return false;
+    }
+
+    return _checksumMismatchProceed;
+}
+
+void ImageWriter::checksumMismatchResponse(bool proceed)
+{
+    _checksumMismatchProceed = proceed;
+    _checksumMismatchResponseReceived = true;
+    emit checksumMismatchResponseReceived();
 }
 
 bool ImageWriter::getBoolSetting(const QString &key)

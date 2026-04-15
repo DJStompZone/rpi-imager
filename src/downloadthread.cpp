@@ -1711,11 +1711,37 @@ void DownloadThread::_writeComplete()
             errorMsg = tr("Download appears to be corrupt. SHA256 hash does not match.<br>"
                          "Expected: %1<br>Actual: %2<br>"
                          "Please check your network connection and try again.").arg(QString(_expectedHash), QString(computedHash));
+
+            // Allow user override for known false-positive remote checksum mismatches.
+            // This is handled by ImageWriter on the GUI thread, with a timeout to avoid hangs.
+            bool proceedDespiteMismatch = false;
+            if (QObject *receiver = parent()) {
+                const bool invoked = QMetaObject::invokeMethod(receiver,
+                                                               "confirmChecksumMismatch",
+                                                               Qt::BlockingQueuedConnection,
+                                                               Q_RETURN_ARG(bool, proceedDespiteMismatch),
+                                                               Q_ARG(QString, errorMsg));
+                if (!invoked) {
+                    qWarning() << "Failed to invoke checksum mismatch confirmation; aborting write";
+                }
+            } else {
+                qWarning() << "No parent available for checksum mismatch confirmation; aborting write";
+            }
+
+            if (proceedDespiteMismatch) {
+                qWarning() << "Proceeding despite checksum mismatch at user request";
+            } else {
+                DownloadThread::_onDownloadError(errorMsg);
+                _closeFiles();
+                return;
+            }
         }
-        
-        DownloadThread::_onDownloadError(errorMsg);
-        _closeFiles();
-        return;
+
+        if (_url.startsWith("file://")) {
+            DownloadThread::_onDownloadError(errorMsg);
+            _closeFiles();
+            return;
+        }
     }
     if (_cacheEnabled && _expectedHash == computedHash)
     {

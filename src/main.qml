@@ -206,6 +206,91 @@ ApplicationWindow {
         }
     }
 
+    BaseDialog {
+        id: checksumMismatchDialog
+        imageWriter: window.imageWriter
+        parent: overlayRoot
+        anchors.centerIn: parent
+
+        property string message: ""
+
+        function escapePressed() {
+            window.imageWriter.checksumMismatchResponse(false)
+            checksumMismatchDialog.close()
+        }
+
+        Component.onCompleted: {
+            registerFocusGroup("content", function(){
+                if (checksumMismatchDialog.imageWriter && checksumMismatchDialog.imageWriter.isScreenReaderActive()) {
+                    return [checksumMismatchTitle, checksumMismatchMessage]
+                }
+                return []
+            }, 0)
+            registerFocusGroup("buttons", function(){
+                return [checksumMismatchCancelButton, checksumMismatchProceedButton]
+            }, 1)
+        }
+
+        Text {
+            id: checksumMismatchTitle
+            text: qsTr("Checksum mismatch")
+            font.pointSize: Style.fontSizeHeading
+            font.family: Style.fontFamilyBold
+            font.bold: true
+            color: Style.formLabelColor
+            Layout.fillWidth: true
+            Accessible.role: Accessible.Heading
+            Accessible.name: text
+            Accessible.focusable: checksumMismatchDialog.imageWriter ? checksumMismatchDialog.imageWriter.isScreenReaderActive() : false
+            focusPolicy: (checksumMismatchDialog.imageWriter && checksumMismatchDialog.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+            activeFocusOnTab: checksumMismatchDialog.imageWriter ? checksumMismatchDialog.imageWriter.isScreenReaderActive() : false
+        }
+
+        Text {
+            id: checksumMismatchMessage
+            text: checksumMismatchDialog.message
+            textFormat: Text.StyledText
+            wrapMode: Text.WordWrap
+            font.pointSize: Style.fontSizeDescription
+            font.family: Style.fontFamily
+            color: Style.textDescriptionColor
+            Layout.fillWidth: true
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text.replace(/<[^>]+>/g, '')
+            Accessible.focusable: checksumMismatchDialog.imageWriter ? checksumMismatchDialog.imageWriter.isScreenReaderActive() : false
+            focusPolicy: (checksumMismatchDialog.imageWriter && checksumMismatchDialog.imageWriter.isScreenReaderActive()) ? Qt.TabFocus : Qt.NoFocus
+            activeFocusOnTab: checksumMismatchDialog.imageWriter ? checksumMismatchDialog.imageWriter.isScreenReaderActive() : false
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.spacingMedium
+            Item {
+                Layout.fillWidth: true
+            }
+            ImButton {
+                id: checksumMismatchCancelButton
+                text: qsTr("Cancel write")
+                accessibleDescription: qsTr("Cancel the write because the checksum did not match")
+                activeFocusOnTab: true
+                onClicked: {
+                    window.imageWriter.checksumMismatchResponse(false)
+                    checksumMismatchDialog.close()
+                }
+            }
+            ImButton {
+                id: checksumMismatchProceedButton
+                text: qsTr("Write anyway")
+                accessibleDescription: qsTr("Continue writing even though the checksum did not match")
+                activeFocusOnTab: true
+                onClicked: {
+                    window.imageWriter.checksumMismatchResponse(true)
+                    checksumMismatchDialog.close()
+                }
+            }
+        }
+    }
+
     // Specific dialog for storage removal during write
     BaseDialog {
         id: storageRemovedDialog
@@ -577,6 +662,11 @@ ApplicationWindow {
         errorDialog.titleText = qsTr("Error");
         errorDialog.message = msg;
         errorDialog.open();
+    }
+
+    function onChecksumMismatchDialogRequested(msg) {
+        checksumMismatchDialog.message = msg
+        checksumMismatchDialog.open()
     }
 
     function onFinalizing() {
