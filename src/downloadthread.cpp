@@ -12,6 +12,7 @@
 #include "timeout_utils.h"
 #include "platformquirks.h"
 #include "drivelist/drivelist.h"
+#include "hashutils.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -60,7 +61,7 @@ using rpi_imager::TimeoutDefaults::kCriticalMemoryMB;
 QByteArray DownloadThread::_proxy;
 
 DownloadThread::DownloadThread(const QByteArray &url, const QByteArray &localfilename, const QByteArray &expectedHash, QObject *parent) :
-    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(expectedHash),
+    QThread(parent), _startOffset(0), _lastDlTotal(0), _lastDlNow(0), _extractTotal(0), _verifyTotal(0), _lastVerifyNow(0), _bytesWritten(0), _lastFailureOffset(0), _sectorsStart(-1), _url(url), _filename(localfilename), _expectedHash(hashutils::normalizeExpectedSha256(expectedHash)),
     _firstBlock(nullptr), _cancelled(false), _successful(false), _verifyEnabled(false), _cacheEnabled(false), _lastModified(0), _serverTime(0),  _lastFailureTime(0),
     _inputBufferSize(SystemMemoryManager::instance().getOptimalInputBufferSize()), _writehash(OSLIST_HASH_ALGORITHM), _verifyhash(OSLIST_HASH_ALGORITHM),
     _hasPendingHash(false)
@@ -906,6 +907,11 @@ void DownloadThread::_hashData(const char *buf, size_t len)
     _writehash.addData(buf, len);
 }
 
+QByteArray DownloadThread::_alternateExpectedHash() const
+{
+    return {};
+}
+
 /*
  * Zero-skip wrapper: scans the buffer for 4KB-aligned zero-filled blocks
  * and seeks past them instead of writing.  Non-zero regions are passed
@@ -1684,8 +1690,14 @@ void DownloadThread::_writeComplete()
     }
 
     QByteArray computedHash = _writehash.result().toHex();
+    QByteArray alternateHash = _alternateExpectedHash();
+    hashutils::HashMatchMode hashMatchMode =
+        hashutils::matchExpectedSha256(_expectedHash, computedHash, alternateHash);
+    bool expectedMatchesUncompressed = (hashMatchMode == hashutils::HashMatchMode::ImageHash);
+    bool expectedMatchesAlternate = (hashMatchMode == hashutils::HashMatchMode::DownloadHash);
+
     qDebug() << "Hash of uncompressed image:" << computedHash;
-    if (!_expectedHash.isEmpty() && _expectedHash != computedHash)
+    if (!_expectedHash.isEmpty() && hashMatchMode == hashutils::HashMatchMode::NoMatch)
     {
         qDebug() << "Mismatch with expected hash:" << _expectedHash;
         
@@ -1717,7 +1729,14 @@ void DownloadThread::_writeComplete()
         _closeFiles();
         return;
     }
-    if (_cacheEnabled && _expectedHash == computedHash)
+    if (expectedMatchesAlternate) {
+        qDebug() << "Expected hash matched compressed download stream hash (not extracted image hash)."
+                 << "expected=" << _expectedHash
+                 << "download=" << alternateHash
+                 << "image=" << computedHash;
+    }
+
+    if (_cacheEnabled && (expectedMatchesUncompressed || expectedMatchesAlternate))
     {
         // Finish async cache writer (waits for all pending writes to complete)
         if (_asyncCacheWriter && _asyncCacheWriter->isActive()) {

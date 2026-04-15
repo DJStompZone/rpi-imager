@@ -232,10 +232,9 @@ size_t DownloadExtractThread::_writeData(const char *buf, size_t len)
         msleep(100);
     }
 
-    if (!_isImage)
-    {
-        _inputHash.addData(buf, len);
-    }
+    // Track hash of compressed download stream for diagnostics and for
+    // manifests that provide download hash instead of extracted image hash.
+    _inputHash.addData(buf, len);
 
     _pushQueue(buf, len);
 
@@ -262,6 +261,11 @@ void DownloadExtractThread::_onDownloadError(const QString &msg)
 {
     DownloadThread::_onDownloadError(msg);
     _cancelExtract();
+}
+
+QByteArray DownloadExtractThread::_alternateExpectedHash() const
+{
+    return _inputHash.result().toHex();
 }
 
 void DownloadExtractThread::_cancelExtract()
